@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>情報漏えいRTA 〜とある新入社員の5日間〜（プロトタイプ）</title>
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --floor:#d9ddd2;
+    --ink:#232a33;
+    --panel:#2e3742;
+    --accent:#ff4d2e;
+    --safe:#3f8f5f;
+    --paper:#f4f2ea;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{width:100%;height:100%;overflow:hidden;background:#1b2129;
+    font-family:'DotGothic16','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;color:var(--ink);
+    touch-action:none;user-select:none;-webkit-user-select:none;}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;}
+  canvas{background:var(--floor);image-rendering:pixelated;}
+  /* ---- HUD ---- */
+  #hud{position:fixed;top:0;left:0;right:0;display:flex;gap:8px;padding:8px 10px;
+    align-items:center;pointer-events:none;z-index:5;}
+  .hudbox{background:rgba(35,42,51,.92);color:#eef1e8;border:2px solid #11161c;
+    padding:4px 10px;font-size:13px;line-height:1.3;white-space:nowrap;}
+  #dayBox{font-size:15px;}
+  .barwrap{flex:1;min-width:60px;}
+  .barlabel{font-size:10px;color:#eef1e8;text-shadow:1px 1px 0 #11161c;margin-bottom:2px;}
+  .bar{height:12px;background:#11161c;border:2px solid #11161c;position:relative;}
+  .bar>i{position:absolute;inset:0;transform-origin:left;background:var(--safe);}
+  #susFill{background:linear-gradient(90deg,#e8a13a,var(--accent));}
+  #timeFill{background:#5e86c4;}
+  /* ---- toasts ---- */
+  #toasts{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:6;
+    display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none;}
+  .toast{background:#fff;border:2px solid #11161c;box-shadow:3px 3px 0 rgba(0,0,0,.35);
+    padding:6px 14px;font-size:13px;animation:pop .18s ease-out;}
+  .toast b{color:var(--accent);}
+  @keyframes pop{from{transform:scale(.7);opacity:0}to{transform:scale(1);opacity:1}}
+  /* ---- touch controls ---- */
+  #stick{position:fixed;left:18px;bottom:18px;width:120px;height:120px;border-radius:50%;
+    background:rgba(35,42,51,.35);border:2px solid rgba(255,255,255,.25);z-index:7;touch-action:none;}
+  #knob{position:absolute;left:50%;top:50%;width:52px;height:52px;border-radius:50%;
+    background:rgba(238,241,232,.85);border:2px solid #11161c;transform:translate(-50%,-50%);}
+  #actBtn{position:fixed;right:20px;bottom:26px;width:96px;height:96px;border-radius:50%;
+    background:var(--accent);color:#fff;border:3px solid #11161c;font-size:15px;z-index:7;
+    font-family:inherit;box-shadow:0 4px 0 #8f2413;display:flex;align-items:center;justify-content:center;
+    text-align:center;line-height:1.2;touch-action:none;}
+  #actBtn.work{background:var(--safe);box-shadow:0 4px 0 #1f5236;}
+  #actBtn:disabled{background:#6b7280;box-shadow:0 4px 0 #3c434d;opacity:.65;}
+  /* ---- fullscreen panels ---- */
+  .panel{position:fixed;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;
+    background:rgba(20,25,32,.94);padding:16px;}
+  .card{background:var(--paper);border:3px solid #11161c;box-shadow:6px 6px 0 rgba(0,0,0,.5);
+    max-width:560px;width:100%;max-height:92vh;overflow-y:auto;padding:22px 24px;}
+  .card h1{font-size:26px;line-height:1.25;margin-bottom:4px;}
+  .card h1 span{color:var(--accent);}
+  .card h2{font-size:19px;margin-bottom:10px;}
+  .card p{font-size:13px;line-height:1.8;margin-bottom:10px;}
+  .card .small{font-size:11px;color:#666;}
+  .card button{display:block;width:100%;margin-top:14px;padding:12px;font-family:inherit;
+    font-size:16px;background:var(--ink);color:#fff;border:2px solid #11161c;cursor:pointer;
+    box-shadow:3px 3px 0 rgba(0,0,0,.4);}
+  .card button:active{transform:translate(2px,2px);box-shadow:1px 1px 0 rgba(0,0,0,.4);}
+  .tag{display:inline-block;background:var(--ink);color:#fff;font-size:11px;padding:2px 8px;margin-bottom:8px;}
+  .newsHead{background:var(--accent);color:#fff;padding:10px 12px;font-size:17px;line-height:1.4;
+    margin:10px 0;border:2px solid #11161c;}
+  table{width:100%;border-collapse:collapse;font-size:12px;margin:8px 0;}
+  th,td{border:1px solid #999;padding:4px 6px;text-align:left;}
+  th{background:#e3e0d4;font-weight:normal;}
+  td.num{text-align:right;font-variant-numeric:tabular-nums;}
+  .rank{font-size:34px;color:var(--accent);text-align:center;margin:8px 0 2px;}
+  .totalScore{text-align:center;font-size:22px;margin-bottom:6px;}
+  .warn{background:#fff3cd;border:2px dashed #b8860b;padding:8px 10px;font-size:11.5px;line-height:1.7;}
+  #langBtn{float:right;width:auto;margin:0 0 8px 10px;padding:6px 14px;
+    font-size:13px;background:var(--paper);color:var(--ink);}
+  .hidden{display:none!important;}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="cv"></canvas></div>
+
+<div id="hud" class="hidden">
+  <div class="hudbox" id="dayBox">1日目</div>
+  <div class="barwrap"><div class="barlabel" id="timeLabel">残り時間</div><div class="bar"><i id="timeFill"></i></div></div>
+  <div class="barwrap"><div class="barlabel" id="susLabel">警戒度</div><div class="bar"><i id="susFill"></i></div></div>
+  <div class="hudbox" id="postBox">投稿 0</div>
+  <button id="leaveBtn" class="hudbox" style="pointer-events:auto;font-family:inherit;cursor:pointer;background:#3f4a58;">退勤</button>
+</div>
+<div id="toasts"></div>
+
+<div id="stick" class="hidden"><div id="knob"></div></div>
+<button id="actBtn" class="hidden" disabled>--</button>
+
+<!-- Title -->
+<div id="title" class="panel">
+  <div class="card">
+    <button id="langBtn">English</button>
+    <div class="tag" id="ttlTag">プロトタイプ v0.5</div>
+    <h1 id="ttlH1">情報漏えい<span>RTA</span></h1>
+    <h2 id="ttlH2">〜とある新入社員の5日間〜</h2>
+    <p id="ttlP1">あなたは今日入社した新入社員。<b>5日間でどれだけ会社を炎上させられるか</b>に人生を賭けている。
+    社内の機密をこっそり撮影してSNSに投稿しろ。ただし、同僚の<b style="color:var(--accent)">視線</b>に映った状態で撮影すると警戒度が上がる。
+    警戒度がMAXになると即日解雇だ。</p>
+    <p id="ttlP2">投稿の本当の炎上結果は、5日間を終えた<b>「後日」</b>に判明する。
+    早い日の投稿ほど拡散時間が長く高倍率。だが入社直後は大した情報に触れられない…。</p>
+    <p id="ttlP3"><b>v0.3:</b> 1日は<b>40秒</b>。資料には<b>撮影できる時間帯</b>がある（消える前に撮れ）。同僚は<b>不意に振り向く</b>。
+    撮影の<b>シャッター音</b>は近くの同僚に聞こえる。問題度が高い資料ほど撮影に時間がかかる。
+    用が済んだら右上の<b>「退勤」</b>で即帰宅できる。
+    <b>同じ資料の再投稿はほとんど伸びない</b>——ネタは新鮮なうちに。</p>
+    <p class="small" id="ttlSmall">操作: 左下スティック or WASD/矢印キーで移動。対象の近くでボタン長押し（or スペース）で撮影。
+    自分のデスク（★）で長押しすると真面目に仕事をして警戒度が下がる。</p>
+    <button id="startBtn">出社する</button>
+  </div>
+</div>
+
+<!-- Day end -->
+<div id="dayEnd" class="panel hidden">
+  <div class="card">
+    <div class="tag" id="deTag">1日目 終了</div>
+    <h2 id="deTitle">退勤しました</h2>
+    <p id="deBody"></p>
+    <button id="nextDayBtn">翌日へ</button>
+  </div>
+</div>
+
+<!-- Fired -->
+<div id="fired" class="panel hidden">
+  <div class="card">
+    <div class="tag">GAME OVER</div>
+    <h1 style="color:var(--accent)" id="firedH1">即日解雇</h1>
+    <p id="firedBody">「ちょっと会議室いいかな」——上司に呼び出されたあなたは、複数の同僚からの通報により
+    その場で懲戒解雇を言い渡された。投稿が世に出て評価される日は、永遠に来なかった。</p>
+    <p id="firedStats" class="small"></p>
+    <button id="retryBtn1">最初からやり直す</button>
+  </div>
+</div>
+
+<!-- Epilogue -->
+<div id="epilogue" class="panel hidden">
+  <div class="card">
+    <div class="tag" id="epiTag">数日後…</div>
+    <div class="newsHead" id="newsHead">【速報】新入社員がSNSに社内機密を投稿か</div>
+    <table id="postTable"></table>
+    <p id="susLine" style="text-align:center;font-size:12px"></p>
+    <div class="totalScore"><span id="totalLabel">合計炎上スコア:</span> <b id="totalScore">0</b></div>
+    <div class="rank" id="rankLabel">RANK C</div>
+    <p id="rankDesc" style="text-align:center"></p>
+    <div class="warn" id="warnBox">※これはフィクションの風刺ゲームです。現実で同じことをすると
+    懲戒解雇・損害賠償請求・刑事責任・キャリア終了が待っています。<b>絶対に真似しないでください。</b></div>
+    <button id="retryBtn2">もう一度5日間を生きる</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ================= world & constants ================= */
+const W=960, H=640;
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+cv.width=W; cv.height=H;
+const DAY_SECONDS=40;
+const DAY_MULT=[5,4,3,2,1];          // 拡散倍率（1日目→5日目）
+const SUS_MAX=100;
+const SUS_SEEN_PHOTO=34;             // 撮影を目撃されたときの上昇/秒
+const SUS_SEEN_RESTRICTED=14;        // 立入エリアで目撃 上昇/秒
+const SUS_SHUTTER=7;                 // シャッター音に気づかれた際の即時上昇
+const SUS_WORK=-2;                   // 仕事中の減少/秒
+const SUS_CARRY=0.6;                 // 翌日への持ち越し率
+const SHUTTER_RANGE=190;             // シャッター音が届く距離
+const photoTime=t=>1.0+t.lv*0.35;    // 問題度が高いほど撮影に時間がかかる
+const REPEAT_DECAY=0.3;              // 同じ対象の再投稿はスコア激減(2回目=30%, 3回目=9%…)
+const SUS_PENALTY=30;                // 最終日終了時の警戒度1につき合計スコアから減点(最大-3000)
+
+/* ================= i18n ================= */
+let lang=localStorage.getItem('jr_lang')||'ja';
+const L={
+ja:{
+  docTitle:'情報漏えいRTA 〜とある新入社員の5日間〜（プロトタイプ）',
+  ttlTag:'プロトタイプ v0.5',
+  ttlH1:'情報漏えい<span>RTA</span>',
+  ttlH2:'〜とある新入社員の5日間〜',
+  ttlP1:'あなたは今日入社した新入社員。<b>5日間でどれだけ会社を炎上させられるか</b>に人生を賭けている。社内の機密をこっそり撮影してSNSに投稿しろ。ただし、同僚の<b style="color:var(--accent)">視線</b>に映った状態で撮影すると警戒度が上がる。警戒度がMAXになると即日解雇だ。',
+  ttlP2:'投稿の本当の炎上結果は、5日間を終えた<b>「後日」</b>に判明する。早い日の投稿ほど拡散時間が長く高倍率。だが入社直後は大した情報に触れられない…。',
+  ttlP3:'<b>v0.3:</b> 1日は<b>40秒</b>。資料には<b>撮影できる時間帯</b>がある（消える前に撮れ）。同僚は<b>不意に振り向く</b>。撮影の<b>シャッター音</b>は近くの同僚に聞こえる。問題度が高い資料ほど撮影に時間がかかる。用が済んだら右上の<b>「退勤」</b>で即帰宅できる。<b>同じ資料の再投稿はほとんど伸びない</b>——ネタは新鮮なうちに。',
+  ttlSmall:'操作: 左下スティック or WASD/矢印キーで移動。対象の近くでボタン長押し（or スペース）で撮影。自分のデスク（★）で長押しすると真面目に仕事をして警戒度が下がる。',
+  startBtn:'出社する',
+  timeLabel:'残り時間', susLabel:'警戒度',
+  leave:'退勤', leaveConfirm:'退勤する?',
+  dayN:d=>`${d}日目`,
+  posts:n=>`投稿 ${n}`,
+  toastDay:d=>`${d}日目 出社`,
+  toastUnlock:names=>`🔓 ${names.join('・')}に入れるようになった`,
+  shootBtn:'📷 撮影', shooting:s=>`撮影中 ${s}s`,
+  workBtn:'💼 仕事', working:'仕事中…', noAct:'--',
+  postToast:(likes,rep)=>`📱 投稿した！ <b>♥ ${likes}</b> いいね${rep?'<br><span style="font-size:11px">（同じネタの再投稿は伸びない…）</span>':''}`,
+  shutterToast:n=>`📸 シャッター音に <b>${n}人</b> が気づいた…！`,
+  deTag:d=>`${d}日目 終了`, deTitle:'退勤しました', nextDayBtn:'翌日へ',
+  deBody:(n,next)=>`本日の投稿: <b>${n}件</b>（結果はまだ誰にも気づかれていない…）<br>警戒度は一晩で少し落ち着いた。<br>`+
+    (next.length?`明日から <b>${next.join('・')}</b> に入れるようになる。ただし拡散時間は1日ぶん短くなる。`:`明日は最終日。拡散時間は最短だ。`),
+  firedH1:'即日解雇',
+  firedBody:'「ちょっと会議室いいかな」——上司に呼び出されたあなたは、複数の同僚からの通報によりその場で懲戒解雇を言い渡された。投稿が世に出て評価される日は、永遠に来なかった。',
+  firedStats:(d,n)=>`記録: ${d}日目 / 未評価の投稿 ${n}件はニュースになる前に削除された。`,
+  retryBtn1:'最初からやり直す',
+  epiTag:'数日後…', totalLabel:'合計炎上スコア:',
+  tableHead:'<tr><th>投稿</th><th>日</th><th>問題度</th><th>倍率</th><th>ビュー</th><th>スコア</th></tr>',
+  reMark:'（再）',
+  noPosts:'<tr><td colspan="6">投稿なし。あなたは普通に良い新入社員だった。</td></tr>',
+  ranks:[
+    {max:0,rank:'RANK -',desc:'何も起きなかった。平和。',head:'【平常】新入社員、普通に研修を終える'},
+    {max:3000,rank:'RANK D',desc:'部署内で軽く注意されて終わった。',head:'【社内】一部投稿に注意喚起'},
+    {max:10000,rank:'RANK C',desc:'部署内で問題化。研修が1日追加された。',head:'【社内通達】SNS投稿に関する緊急研修を実施'},
+    {max:22000,rank:'RANK B',desc:'業界ニュースに掲載。会社が謝罪文を公開。',head:'【業界紙】従業員がSNSに内部資料を投稿'},
+    {max:32000,rank:'RANK A',desc:'全国ニュースで大炎上。社長が謝罪会見。',head:'【速報】新入社員がSNSに機密投稿 社長が謝罪'},
+    {max:Infinity,rank:'RANK S',desc:'1,000万ビュー超え。「情報漏えいRTA」として殿堂入り。',head:'【衝撃】入社5日で会社を炎上させた新入社員 1000万ビュー'},
+  ],
+  warnBox:'※これはフィクションの風刺ゲームです。現実で同じことをすると懲戒解雇・損害賠償請求・刑事責任・キャリア終了が待っています。<b>絶対に真似しないでください。</b>',
+  retryBtn2:'もう一度5日間を生きる',
+  playerLabel:'新入社員', spotted:'！見られている！', typing:'カタカタ…',
+  ghost:(name,s)=>`${name} あと${s}s`, closing:s=>` 残${s}s`,
+  susPenalty:(s,p)=>`最終警戒度 ${s}% ペナルティ: <b style="color:var(--accent)">-${p.toLocaleString()}</b>（怪しまれていた分、投稿の削除が早かった…）`,
+  susClean:'最終警戒度 0%: 誰にも疑われなかった（減点なし）',
+},
+en:{
+  docTitle:'Info Leak RTA — 5 Days of a New Hire (Prototype)',
+  ttlTag:'Prototype v0.5',
+  ttlH1:'Info Leak <span>RTA</span>',
+  ttlH2:'— 5 Days of a New Hire —',
+  ttlP1:'You are a new hire who just started today, and you\'ve bet your life on <b>how badly you can set the company ablaze in 5 days</b>. Sneak photos of company secrets and post them to social media. But shooting while caught in a coworker\'s <b style="color:var(--accent)">line of sight</b> raises suspicion. Max it out and you\'re fired on the spot.',
+  ttlP2:'How hard each post actually blows up is only revealed <b>days later</b>, after the 5 days end. Earlier posts spread longer and score higher multipliers — but a brand-new hire can\'t reach the juicy stuff yet…',
+  ttlP3:'<b>v0.3:</b> Each day lasts <b>40 seconds</b>. Documents can only be shot during <b>time windows</b> (shoot before they vanish). Coworkers <b>glance around at random</b>. The <b>shutter sound</b> can be heard by nearby coworkers. Riskier documents take longer to shoot. Done for the day? Hit <b>“Leave”</b> (top right) to head home early. <b>Reposting the same doc barely spreads</b> — post it while it\'s fresh.',
+  ttlSmall:'Controls: left stick or WASD/arrow keys to move. Hold the button (or Space) near a target to shoot. Hold at your own desk (★) to do honest work and lower suspicion.',
+  startBtn:'Clock In',
+  timeLabel:'TIME', susLabel:'SUSPICION',
+  leave:'Leave', leaveConfirm:'Leave now?',
+  dayN:d=>`Day ${d}`,
+  posts:n=>`Posts ${n}`,
+  toastDay:d=>`Day ${d} — clocked in`,
+  toastUnlock:names=>`🔓 Unlocked: ${names.join(', ')}`,
+  shootBtn:'📷 Shoot', shooting:s=>`Shooting ${s}s`,
+  workBtn:'💼 Work', working:'Working…', noAct:'--',
+  postToast:(likes,rep)=>`📱 Posted! <b>♥ ${likes}</b> likes${rep?'<br><span style="font-size:11px">(reposts of the same doc barely spread…)</span>':''}`,
+  shutterToast:n=>`📸 <b>${n}</b> coworker${n>1?'s':''} noticed the shutter…!`,
+  deTag:d=>`Day ${d} Over`, deTitle:'You clocked out', nextDayBtn:'Next Day',
+  deBody:(n,next)=>`Posts today: <b>${n}</b> (no one has noticed anything yet…)<br>Your suspicion cooled off a bit overnight.<br>`+
+    (next.length?`Starting tomorrow you can enter the <b>${next.join(', ')}</b>. But posts will have one less day to spread.`:`Tomorrow is the final day. Minimum spread time.`),
+  firedH1:'FIRED ON THE SPOT',
+  firedBody:'“Got a minute? Meeting room.” — Called in by your boss, you were summarily dismissed after multiple coworkers reported you. The day your posts would be seen and judged by the world never came.',
+  firedStats:(d,n)=>`Record: Day ${d} / Your ${n} unjudged post${n===1?'':'s'} were deleted before ever making the news.`,
+  retryBtn1:'Start Over',
+  epiTag:'A few days later…', totalLabel:'Total Flame Score:',
+  tableHead:'<tr><th>Post</th><th>Day</th><th>Risk</th><th>Mult</th><th>Views</th><th>Score</th></tr>',
+  reMark:'(re)',
+  noPosts:'<tr><td colspan="6">No posts. You were honestly just a good new hire.</td></tr>',
+  ranks:[
+    {max:0,rank:'RANK -',desc:'Nothing happened. Peaceful.',head:'[Uneventful] New hire quietly finishes training'},
+    {max:3000,rank:'RANK D',desc:'You got a light scolding within the department.',head:'[Internal] A few posts prompt a company heads-up'},
+    {max:10000,rank:'RANK C',desc:'It became a departmental issue. One extra day of training was added.',head:'[Internal memo] Emergency social media training held'},
+    {max:22000,rank:'RANK B',desc:'Covered by the trade press. The company published an apology.',head:'[Trade press] Employee posts internal documents online'},
+    {max:32000,rank:'RANK A',desc:'National news firestorm. The CEO held an apology press conference.',head:'[Breaking] New hire leaks secrets — CEO apologizes'},
+    {max:Infinity,rank:'RANK S',desc:'Over 10 million views. Enshrined forever as the “Info Leak RTA”.',head:'[Shock] New hire torches company in 5 days — 10M views'},
+  ],
+  warnBox:'*This is a fictional satire game. Doing this in real life means dismissal for cause, damage claims, criminal liability, and the end of your career. <b>Never, ever imitate this.</b>',
+  retryBtn2:'Live the 5 Days Again',
+  playerLabel:'New Hire', spotted:'! SPOTTED !', typing:'*tak tak tak*',
+  ghost:(name,s)=>`${name} in ${s}s`, closing:s=>` ${s}s left`,
+  susPenalty:(s,p)=>`Final suspicion ${s}% penalty: <b style="color:var(--accent)">-${p.toLocaleString()}</b> (being suspected got your posts taken down faster…)`,
+  susClean:'Final suspicion 0%: nobody suspected a thing (no penalty)',
+}};
+const tr=k=>L[lang][k];
+/* 部屋名・撮影対象名の英訳（データ側は日本語キーのまま） */
+const NAME_EN={
+  '研修室':'Training Room','会議室':'Meeting Room','役員室':'Executive Office',
+  '資料室':'Archives','執務エリア':'Office Floor',
+  '新人研修資料':'Onboarding Handout','研修講師のPC画面':"Trainer's PC Screen",
+  'ホワイトボードの顧客名':'Client Names on Whiteboard','同僚のPC画面':"Coworker's PC Screen",
+  '会議室の議事録':'Meeting Minutes','取引先との契約書':'Client Contract',
+  '顧客名簿ファイル':'Customer List File','役員会資料':'Board Meeting Docs',
+  'M&A極秘資料':'Top-Secret M&A File',
+};
+const tn=n=>lang==='en'?(NAME_EN[n]||n):n;
+function applyLang(){
+  document.documentElement.lang=lang;
+  document.title=tr('docTitle');
+  const html=(id,k)=>{document.getElementById(id).innerHTML=tr(k);};
+  const text=(id,k)=>{document.getElementById(id).textContent=tr(k);};
+  html('ttlH1','ttlH1');html('ttlP1','ttlP1');html('ttlP2','ttlP2');html('ttlP3','ttlP3');
+  html('ttlSmall','ttlSmall');html('firedBody','firedBody');html('warnBox','warnBox');
+  text('ttlTag','ttlTag');text('ttlH2','ttlH2');text('startBtn','startBtn');
+  text('timeLabel','timeLabel');text('susLabel','susLabel');text('leaveBtn','leave');
+  text('deTitle','deTitle');text('nextDayBtn','nextDayBtn');
+  text('firedH1','firedH1');text('retryBtn1','retryBtn1');
+  text('epiTag','epiTag');text('totalLabel','totalLabel');text('retryBtn2','retryBtn2');
+  document.getElementById('langBtn').textContent=lang==='ja'?'English':'日本語';
+}
+
+/* ---- map: walls (x,y,w,h) ---- */
+const T=16;
+const walls=[
+  {x:0,y:0,w:W,h:T},{x:0,y:H-T,w:W,h:T},{x:0,y:0,w:T,h:H},{x:W-T,y:0,w:T,h:H},
+  // 研修室 (左上)
+  {x:T,y:250,w:180,h:14},{x:300,y:250,w:60,h:14},{x:346,y:T,w:14,h:250-T+14},
+  // 会議室 (上中央)
+  {x:346,y:200,w:194,h:14},{x:620,y:200,w:60,h:14},{x:666,y:T,w:14,h:200+14-T},
+  // 役員室 (右上)
+  {x:680,y:200,w:120,h:14},{x:860,y:200,w:100-T,h:14},
+  // 資料室 (左下)
+  {x:T,y:430,w:120,h:14},{x:220,y:430,w:80,h:14},{x:286,y:430,w:14,h:H-T-430},
+];
+/* ---- doors: block until unlockDay ---- */
+const doors=[
+  {x:196,y:250,w:104,h:14,unlockDay:1,label:'研修室'},          // 研修室は初日から
+  {x:540,y:200,w:80,h:14,unlockDay:2,label:'会議室'},
+  {x:130,y:430,w:90,h:14,unlockDay:3,label:'資料室'},
+  {x:800,y:200,w:60,h:14,unlockDay:4,label:'役員室'},
+];
+/* ---- restricted rooms: 目撃されると警戒度が上がるエリア ---- */
+const restricted=[
+  {x:300,y:T,w:366,h:184,name:'会議室'},
+  {x:680,y:T,w:W-T-680,h:184,name:'役員室'},
+  {x:T,y:444,w:270,h:H-T-444,name:'資料室'},
+];
+/* ---- targets: from/until は1日(40秒)内の出現時間窓 ---- */
+const targetsDef=[
+  {x:120,y:120,name:'新人研修資料',lv:1,fromDay:1,toDay:2},
+  {x:250,y:80,name:'研修講師のPC画面',lv:2,fromDay:1,toDay:2,until:17},
+  {x:520,y:420,name:'ホワイトボードの顧客名',lv:2,fromDay:1,until:24},
+  {x:760,y:520,name:'同僚のPC画面',lv:3,fromDay:2,from:13,until:30},
+  {x:470,y:90,name:'会議室の議事録',lv:3,fromDay:2,from:10},
+  {x:90,y:560,name:'取引先との契約書',lv:4,fromDay:3,until:20},
+  {x:210,y:500,name:'顧客名簿ファイル',lv:4,fromDay:3,from:17},
+  {x:780,y:80,name:'役員会資料',lv:5,fromDay:4,from:13,until:27},
+  {x:880,y:150,name:'M&A極秘資料',lv:6,fromDay:5,from:17,until:27},
+];
+function elapsedToday(){return DAY_SECONDS-timeLeft;}
+function targetActive(t){const e=elapsedToday();return e>=(t.from||0)&&e<=(t.until??DAY_SECONDS);}
+/* ---- desks (decor) + own desk ---- */
+const desks=[
+  {x:430,y:360,w:70,h:36},{x:430,y:470,w:70,h:36},
+  {x:560,y:360,w:70,h:36},{x:560,y:470,w:70,h:36},
+  {x:700,y:360,w:70,h:36},{x:700,y:470,w:70,h:36},
+  {x:820,y:470,w:70,h:36},
+];
+const ownDesk={x:430,y:360,w:70,h:36};
+/* ---- NPCs ---- */
+function mkNpc(wps,speed,color){return{wps,idx:0,x:wps[0][0],y:wps[0][1],speed,dir:0,color,pause:0,
+  glanceT:0,glanceCd:2+Math.random()*4};}
+const npcDefs=()=>[
+  mkNpc([[70,90],[300,90],[300,210],[70,210]],32,'#5a7d3c'),     // 研修講師(研修室内)
+  mkNpc([[400,300],[900,300],[900,560],[400,560]],55,'#4a6fa5'),
+  mkNpc([[640,320],[640,600],[380,600],[380,320]],48,'#7a5aa0'),
+  mkNpc([[80,300],[300,300],[300,400],[80,400]],42,'#a06a3c'),
+  mkNpc([[500,60],[640,60],[640,160],[420,160]],40,'#3c8f7a'),   // 会議室内
+  mkNpc([[720,60],[930,60],[930,170],[720,170]],36,'#8f3c5a'),   // 役員室内
+  mkNpc([[40,470],[260,470],[260,600],[40,600]],38,'#c2914a'),   // 資料室内
+];
+const VISION_RANGE=150, VISION_HALF=Math.PI/5;
+
+/* ================= state ================= */
+let state='title'; // title | play | dayend | fired | epilogue
+let day=1, timeLeft=DAY_SECONDS, sus=0;
+let player={x:465,y:330,r:11,vx:0,vy:0};
+let npcs=npcDefs();
+let targets=[];
+let posts=[];          // {name,lv,day,likes}
+let seenNow=false, restrictedNow=null;
+let actionHold=0, actionMode=null; // 'photo'|'work'
+let actionTarget=null;  // 撮影中にロックする対象（時間切れでも撮り切れる）
+let nearTarget=null, nearDesk=false;
+let todayPosts=0;
+
+function resetTargetsForDay(){
+  targets=targetsDef.filter(t=>t.fromDay<=day&&day<=(t.toDay||5)).map(t=>({...t,done:false}));
+}
+function startGame(){
+  day=1; sus=0; posts=[]; startDay();
+}
+function startDay(){
+  timeLeft=DAY_SECONDS; todayPosts=0;
+  player.x=465; player.y=330;
+  npcs=npcDefs();
+  resetTargetsForDay();
+  actionHold=0; actionMode=null; actionTarget=null;
+  const lb=document.getElementById('leaveBtn'); if(lb){lb.textContent=tr('leave');}
+  setState('play');
+  toast(tr('toastDay')(day));
+  const unlocked=doors.filter(d=>d.unlockDay===day&&day>1);
+  if(unlocked.length) toast(tr('toastUnlock')(unlocked.map(d=>tn(d.label))));
+}
+function setState(s){
+  state=s;
+  if(s!=='play')sfxTyping.pause();
+  document.getElementById('hud').classList.toggle('hidden',s!=='play');
+  document.getElementById('stick').classList.toggle('hidden',s!=='play');
+  document.getElementById('actBtn').classList.toggle('hidden',s!=='play');
+  for(const id of['title','dayEnd','fired','epilogue'])
+    document.getElementById(id).classList.add('hidden');
+  if(s==='title')document.getElementById('title').classList.remove('hidden');
+  if(s==='dayend')document.getElementById('dayEnd').classList.remove('hidden');
+  if(s==='fired')document.getElementById('fired').classList.remove('hidden');
+  if(s==='epilogue')document.getElementById('epilogue').classList.remove('hidden');
+}
+
+/* ================= helpers ================= */
+function rectsBlocking(){
+  const r=[...walls,...desks];
+  for(const d of doors) if(day<d.unlockDay) r.push(d);
+  return r;
+}
+function hitRect(px,py,r,rc){return px+r>rc.x&&px-r<rc.x+rc.w&&py+r>rc.y&&py-r<rc.y+rc.h;}
+function segRect(x1,y1,x2,y2,rc){
+  // coarse sampling LOS
+  const steps=14;
+  for(let i=1;i<steps;i++){
+    const t=i/steps, px=x1+(x2-x1)*t, py=y1+(y2-y1)*t;
+    if(px>rc.x&&px<rc.x+rc.w&&py>rc.y&&py<rc.y+rc.h)return true;
+  }
+  return false;
+}
+function los(x1,y1,x2,y2){
+  for(const rc of rectsBlocking()) if(segRect(x1,y1,x2,y2,rc)) return false;
+  return true;
+}
+/* 視線コーン描画用: レイがAABBに入るまでの距離（slab法）。当たらなければInfinity */
+function rayRectDist(x,y,dx,dy,rc){
+  let tmin=-Infinity,tmax=Infinity;
+  if(dx!==0){const t1=(rc.x-x)/dx,t2=(rc.x+rc.w-x)/dx;
+    tmin=Math.max(tmin,Math.min(t1,t2));tmax=Math.min(tmax,Math.max(t1,t2));}
+  else if(x<rc.x||x>rc.x+rc.w)return Infinity;
+  if(dy!==0){const t1=(rc.y-y)/dy,t2=(rc.y+rc.h-y)/dy;
+    tmin=Math.max(tmin,Math.min(t1,t2));tmax=Math.min(tmax,Math.max(t1,t2));}
+  else if(y<rc.y||y>rc.y+rc.h)return Infinity;
+  if(tmax<tmin||tmax<0)return Infinity;
+  return Math.max(tmin,0);
+}
+function npcSeesPlayer(n){
+  const dx=player.x-n.x, dy=player.y-n.y, d=Math.hypot(dx,dy);
+  if(d>VISION_RANGE)return false;
+  let a=Math.atan2(dy,dx)-n.dir;
+  while(a>Math.PI)a-=2*Math.PI; while(a<-Math.PI)a+=2*Math.PI;
+  if(Math.abs(a)>VISION_HALF)return false;
+  return los(n.x,n.y,player.x,player.y);
+}
+function toast(msg){
+  const t=document.createElement('div');t.className='toast';t.innerHTML=msg;
+  document.getElementById('toasts').appendChild(t);
+  setTimeout(()=>t.remove(),2600);
+}
+/* ---- sound effects ---- */
+function mkSfx(src){const a=new Audio(src);a.preload='auto';return a;}
+const sfxShutter=mkSfx('sound/カメラのシャッター1.mp3');   // 撮影
+const sfxSuccess=mkSfx('sound/心臓の鼓動1.mp3');           // いいね通知
+const sfxDecide=mkSfx('sound/決定ボタンを押す2.mp3');      // その他ボタン操作
+const sfxTyping=mkSfx('sound/キーボードの早打ち1.mp3');    // 仕事中ループ
+sfxTyping.loop=true;
+const sfxFired=mkSfx('sound/魔の時計塔の鐘.mp3');          // 解雇(GAME OVER)
+const sfxResult=mkSfx('sound/爆発1.mp3');                  // リザルト(後日ニュース)画面表示
+/* いいね音は2倍音量: HTMLAudioの上限(1.0)を超えるためWeb Audioのゲインで増幅 */
+let audioCtx=null;
+try{
+  audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  const g=audioCtx.createGain();g.gain.value=2;
+  audioCtx.createMediaElementSource(sfxSuccess).connect(g);g.connect(audioCtx.destination);
+}catch(e){audioCtx=null;}
+function playSfx(a){
+  if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();
+  a.currentTime=0;a.play().catch(()=>{});
+}
+
+/* ================= input ================= */
+const keys={};
+addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();
+  if(k===' '&&!keys[k]&&!nearTarget)playSfx(sfxDecide);
+  keys[k]=true; if(e.key===' ')e.preventDefault();
+});
+addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
+let stickVec={x:0,y:0}, stickId=null;
+const stick=document.getElementById('stick'),knob=document.getElementById('knob');
+function stickPos(e){
+  const r=stick.getBoundingClientRect();
+  const dx=e.clientX-(r.left+r.width/2), dy=e.clientY-(r.top+r.height/2);
+  const d=Math.hypot(dx,dy)||1, m=Math.min(d,r.width/2-10);
+  stickVec={x:dx/d*(m/(r.width/2-10)),y:dy/d*(m/(r.width/2-10))};
+  knob.style.left=`calc(50% + ${dx/d*m}px)`;knob.style.top=`calc(50% + ${dy/d*m}px)`;
+}
+stick.addEventListener('pointerdown',e=>{stickId=e.pointerId;stick.setPointerCapture(e.pointerId);stickPos(e);});
+stick.addEventListener('pointermove',e=>{if(e.pointerId===stickId)stickPos(e);});
+const stickEnd=e=>{if(e.pointerId===stickId){stickId=null;stickVec={x:0,y:0};knob.style.left='50%';knob.style.top='50%';}};
+stick.addEventListener('pointerup',stickEnd);stick.addEventListener('pointercancel',stickEnd);
+let btnHeld=false;
+const actBtn=document.getElementById('actBtn');
+actBtn.addEventListener('pointerdown',e=>{btnHeld=true;actBtn.setPointerCapture(e.pointerId);if(!nearTarget)playSfx(sfxDecide);});
+const btnUp=()=>{btnHeld=false;};
+actBtn.addEventListener('pointerup',btnUp);actBtn.addEventListener('pointercancel',btnUp);
+
+/* ================= update ================= */
+let last=performance.now();
+function update(dt){
+  if(state!=='play')return;
+  /* time */
+  timeLeft-=dt;
+  if(timeLeft<=0){endDay();return;}
+  /* movement */
+  let mx=(keys['d']||keys['arrowright']?1:0)-(keys['a']||keys['arrowleft']?1:0)+stickVec.x;
+  let my=(keys['s']||keys['arrowdown']?1:0)-(keys['w']||keys['arrowup']?1:0)+stickVec.y;
+  const ml=Math.hypot(mx,my); if(ml>1){mx/=ml;my/=ml;}
+  const speed=(actionMode?60:130); // 行動中は遅い
+  const blocks=rectsBlocking();
+  let nx=player.x+mx*speed*dt;
+  if(!blocks.some(rc=>hitRect(nx,player.y,player.r,rc)))player.x=nx;
+  let ny=player.y+my*speed*dt;
+  if(!blocks.some(rc=>hitRect(player.x,ny,player.r,rc)))player.y=ny;
+  player.x=Math.max(T+player.r,Math.min(W-T-player.r,player.x));
+  player.y=Math.max(T+player.r,Math.min(H-T-player.r,player.y));
+  /* npcs */
+  for(const n of npcs){
+    if(n.glanceT>0){n.glanceT-=dt;continue;}          // チラ見中は静止
+    n.glanceCd-=dt;
+    if(n.glanceCd<=0){                                 // ランダムに振り向く
+      n.glanceCd=2.5+Math.random()*4;
+      n.glanceT=0.9;
+      n.dir=Math.random()*Math.PI*2;
+      continue;
+    }
+    if(n.pause>0){n.pause-=dt;continue;}
+    const tp=n.wps[n.idx], dx=tp[0]-n.x, dy=tp[1]-n.y, d=Math.hypot(dx,dy);
+    if(d<4){n.idx=(n.idx+1)%n.wps.length;n.pause=0.6+Math.random();continue;}
+    n.dir=Math.atan2(dy,dx);
+    n.x+=dx/d*n.speed*dt; n.y+=dy/d*n.speed*dt;
+  }
+  /* seen? */
+  seenNow=npcs.some(n=>npcSeesPlayer(n));
+  restrictedNow=null;
+  for(const rr of restricted) if(hitRect(player.x,player.y,0,rr)){restrictedNow=rr;break;}
+  /* proximity */
+  nearTarget=null;
+  for(const t of targets){
+    if(t.done)continue;
+    const locked=(t===actionTarget);          // 撮影中は時間切れでも継続できる
+    if(!locked&&!targetActive(t))continue;
+    if(Math.hypot(t.x-player.x,t.y-player.y)<52){nearTarget=t;break;}
+  }
+  nearDesk=hitRect(player.x,player.y,26,ownDesk);
+  /* action */
+  const wantAct=btnHeld||keys[' '];
+  if(wantAct&&nearTarget){actionMode='photo';actionTarget=nearTarget;actionHold+=dt;
+    if(actionHold>=photoTime(nearTarget)){doPost(nearTarget);actionHold=0;actionMode=null;actionTarget=null;}
+  }else if(wantAct&&nearDesk){actionMode='work';actionTarget=null;}
+  else{actionMode=null;actionHold=0;actionTarget=null;}
+  if(actionMode==='work'){if(sfxTyping.paused)sfxTyping.play().catch(()=>{});}
+  else if(!sfxTyping.paused)sfxTyping.pause();
+  /* suspicion */
+  let d=0;
+  if(seenNow&&actionMode==='photo')d+=SUS_SEEN_PHOTO;
+  if(seenNow&&restrictedNow)d+=SUS_SEEN_RESTRICTED;
+  if(actionMode==='work')d+=SUS_WORK;
+  sus=Math.max(0,Math.min(SUS_MAX,sus+d*dt));
+  if(sus>=SUS_MAX){onFired();return;}
+  /* HUD */
+  document.getElementById('dayBox').textContent=tr('dayN')(day);
+  document.getElementById('timeFill').style.transform=`scaleX(${timeLeft/DAY_SECONDS})`;
+  document.getElementById('susFill').style.transform=`scaleX(${sus/SUS_MAX})`;
+  document.getElementById('postBox').textContent=tr('posts')(posts.length);
+  if(nearTarget){actBtn.disabled=false;actBtn.classList.remove('work');
+    actBtn.textContent=actionMode==='photo'?tr('shooting')(Math.ceil((photoTime(nearTarget)-actionHold)*10)/10):tr('shootBtn');}
+  else if(nearDesk){actBtn.disabled=false;actBtn.classList.add('work');
+    actBtn.textContent=actionMode==='work'?tr('working'):tr('workBtn');}
+  else{actBtn.disabled=true;actBtn.classList.remove('work');actBtn.textContent=tr('noAct');}
+}
+function doPost(t){
+  t.done=true; todayPosts++;
+  playSfx(sfxShutter);
+  const rep=posts.filter(p=>p.name===t.name).length;      // 過去の同名投稿数
+  const repMult=Math.pow(REPEAT_DECAY,rep);
+  const likes=Math.round(t.lv*(20+Math.random()*40)*DAY_MULT[day-1]*repMult);
+  posts.push({name:t.name,lv:t.lv,day,likes,repMult});
+  toast(tr('postToast')(likes.toLocaleString(),rep>0));
+  playSfx(sfxSuccess);
+  /* シャッター音: 近くのNPCが振り向く */
+  let noticed=0;
+  for(const n of npcs){
+    if(Math.hypot(n.x-player.x,n.y-player.y)>SHUTTER_RANGE)continue;
+    if(!los(n.x,n.y,player.x,player.y))continue;
+    n.dir=Math.atan2(player.y-n.y,player.x-n.x);
+    n.glanceT=1.1;
+    if(npcSeesPlayer(n)){sus=Math.min(SUS_MAX,sus+SUS_SHUTTER);noticed++;}
+  }
+  if(noticed>0)toast(tr('shutterToast')(noticed));
+  if(sus>=SUS_MAX)onFired();
+}
+function endDay(){
+  if(day>=5){buildEpilogue();setState('epilogue');return;}
+  document.getElementById('deTag').textContent=tr('deTag')(day);
+  const next=doors.filter(d=>d.unlockDay===day+1).map(d=>tn(d.label));
+  document.getElementById('deBody').innerHTML=tr('deBody')(todayPosts,next);
+  sus*=SUS_CARRY;
+  setState('dayend');
+}
+function onFired(){
+  playSfx(sfxFired);
+  document.getElementById('firedStats').textContent=tr('firedStats')(day,posts.length);
+  setState('fired');
+}
+/* ================= epilogue ================= */
+function buildEpilogue(){
+  playSfx(sfxResult);
+  let total=0;
+  const rows=posts.map(p=>{
+    const score=Math.round(p.lv*p.lv*100*DAY_MULT[p.day-1]*(p.repMult??1));
+    const views=Math.round(score*(80+Math.random()*80));
+    total+=score;
+    return {...p,score,views};
+  }).sort((a,b)=>b.score-a.score);
+  const tbl=document.getElementById('postTable');
+  tbl.innerHTML=tr('tableHead')+
+    (rows.length?rows.map(p=>
+      `<tr><td>${tn(p.name)}${(p.repMult??1)<1?`<span style="color:#999">${tr('reMark')}</span>`:''}</td><td class="num">${p.day}</td><td>${'★'.repeat(p.lv)}</td>`+
+      `<td class="num">×${DAY_MULT[p.day-1]}</td><td class="num">${p.views.toLocaleString()}</td>`+
+      `<td class="num"><b>${p.score.toLocaleString()}</b></td></tr>`).join('')
+    :tr('noPosts'));
+  /* 最終警戒度ペナルティ: 警戒度0なら減点なし */
+  const susFinal=Math.round(sus);
+  const penalty=susFinal*SUS_PENALTY;
+  total=Math.max(0,total-penalty);
+  document.getElementById('susLine').innerHTML=susFinal>0?tr('susPenalty')(susFinal,penalty):tr('susClean');
+  document.getElementById('totalScore').textContent=total.toLocaleString();
+  const r=tr('ranks').find(r=>total<=0?r.max===0:(total<r.max&&r.max>0));
+  document.getElementById('rankLabel').textContent=r.rank;
+  document.getElementById('rankDesc').textContent=r.desc;
+  document.getElementById('newsHead').textContent=r.head;
+}
+/* ================= draw ================= */
+function roomLabel(x,y,txt,locked){
+  ctx.fillStyle=locked?'#9aa0a8':'#7d8894';
+  ctx.font='13px DotGothic16, sans-serif';
+  ctx.fillText(txt+(locked?' 🔒':''),x,y);
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  /* floor grid */
+  ctx.strokeStyle='rgba(0,0,0,.05)';
+  for(let x=0;x<W;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  /* restricted tint */
+  for(const rr of restricted){ctx.fillStyle='rgba(200,120,60,.08)';ctx.fillRect(rr.x,rr.y,rr.w,rr.h);}
+  /* desks */
+  for(const d of desks){ctx.fillStyle='#b9c0b2';ctx.fillRect(d.x,d.y,d.w,d.h);
+    ctx.strokeStyle='#7d8874';ctx.strokeRect(d.x,d.y,d.w,d.h);}
+  ctx.fillStyle='#3f8f5f';ctx.font='16px sans-serif';
+  ctx.fillText('★',ownDesk.x+ownDesk.w/2-8,ownDesk.y+ownDesk.h/2+6);
+  /* walls */
+  ctx.fillStyle='#5a6472';
+  for(const rc of walls)ctx.fillRect(rc.x,rc.y,rc.w,rc.h);
+  /* doors */
+  for(const d of doors){
+    if(day<d.unlockDay){ctx.fillStyle='#a8552e';ctx.fillRect(d.x,d.y,d.w,d.h);
+      ctx.fillStyle='#fff';ctx.font='10px sans-serif';ctx.fillText('🔒',d.x+d.w/2-6,d.y+11);}
+  }
+  roomLabel(60,60,tn('研修室'),false);
+  roomLabel(430,50,tn('会議室'),day<2);
+  roomLabel(720,50,tn('役員室'),day<4);
+  roomLabel(50,470,tn('資料室'),day<3);
+  roomLabel(500,320,tn('執務エリア'),false);
+  /* targets */
+  ctx.textAlign='center';
+  const eNow=elapsedToday();
+  for(const t of targets){
+    if(t.done)continue;
+    const locked=(t===actionTarget);                         // 撮影中は消滅済みでも表示継続
+    if(!locked&&t.until!==undefined&&eNow>t.until)continue;   // 消滅済み
+    if(!locked&&eNow<(t.from||0)){                            // 出現前: ゴースト表示
+      ctx.fillStyle='rgba(120,130,140,.45)';
+      ctx.beginPath();ctx.arc(t.x,t.y,7,0,7);ctx.fill();
+      ctx.fillStyle='rgba(80,90,100,.8)';ctx.font='10px DotGothic16, sans-serif';
+      ctx.fillText(tr('ghost')(tn(t.name),Math.ceil((t.from||0)-eNow)),t.x,t.y-13);
+      continue;
+    }
+    const pulse=1+Math.sin(performance.now()/300)*0.15;
+    const closing=t.until!==undefined&&t.until-eNow<8;       // 消滅間際
+    ctx.fillStyle=closing?'#ff4d2e':'#e8a13a';
+    ctx.beginPath();ctx.arc(t.x,t.y,8*pulse,0,7);ctx.fill();
+    ctx.strokeStyle='#11161c';ctx.stroke();
+    ctx.fillStyle=closing?'#ff4d2e':'#232a33';ctx.font='11px DotGothic16, sans-serif';
+    ctx.fillText(`${tn(t.name)} ${'★'.repeat(t.lv)}${closing?tr('closing')(Math.max(0,Math.ceil(t.until-eNow))):''}`,t.x,t.y-14);
+  }
+  ctx.textAlign='left';
+  /* npcs + cones（壁でクリップ: 扇形をレイの束で描く。机は見た目では遮らない） */
+  const blocks=[...walls];
+  for(const d of doors) if(day<d.unlockDay) blocks.push(d);
+  for(const n of npcs){
+    const sees=npcSeesPlayer(n);
+    ctx.fillStyle=sees?'rgba(255,60,30,.30)':'rgba(90,110,140,.16)';
+    ctx.beginPath();ctx.moveTo(n.x,n.y);
+    const RAYS=24;
+    for(let i=0;i<=RAYS;i++){
+      const a=n.dir-VISION_HALF+VISION_HALF*2*i/RAYS;
+      const dx=Math.cos(a),dy=Math.sin(a);
+      let dist=VISION_RANGE;
+      for(const rc of blocks){const t=rayRectDist(n.x,n.y,dx,dy,rc);if(t<dist)dist=t;}
+      ctx.lineTo(n.x+dx*dist,n.y+dy*dist);
+    }
+    ctx.closePath();ctx.fill();
+    ctx.fillStyle=n.color;
+    ctx.beginPath();ctx.arc(n.x,n.y,10,0,7);ctx.fill();
+    ctx.strokeStyle='#11161c';ctx.stroke();
+  }
+  /* player */
+  ctx.fillStyle='#eef1e8';
+  ctx.beginPath();ctx.arc(player.x,player.y,player.r,0,7);ctx.fill();
+  ctx.strokeStyle='#11161c';ctx.lineWidth=2;ctx.stroke();ctx.lineWidth=1;
+  ctx.fillStyle='#232a33';ctx.font='10px sans-serif';
+  ctx.textAlign='center';ctx.fillText(tr('playerLabel'),player.x,player.y-16);ctx.textAlign='left';
+  /* photo progress ring */
+  if(actionMode==='photo'&&nearTarget){
+    ctx.strokeStyle='#ff4d2e';ctx.lineWidth=4;
+    ctx.beginPath();ctx.arc(player.x,player.y,18,-Math.PI/2,-Math.PI/2+(actionHold/photoTime(nearTarget))*2*Math.PI);
+    ctx.stroke();ctx.lineWidth=1;
+  }
+  if(actionMode==='work'){
+    ctx.fillStyle='#3f8f5f';ctx.font='12px sans-serif';
+    ctx.textAlign='center';ctx.fillText(tr('typing'),player.x,player.y+30);ctx.textAlign='left';
+  }
+  /* seen alert */
+  if(seenNow&&(actionMode==='photo'||restrictedNow)){
+    ctx.fillStyle='#ff4d2e';ctx.font='bold 15px DotGothic16, sans-serif';
+    ctx.textAlign='center';ctx.fillText(tr('spotted'),player.x,player.y-32);ctx.textAlign='left';
+  }
+}
+/* ================= loop & resize ================= */
+function loop(now){
+  const dt=Math.min(0.05,(now-last)/1000);last=now;
+  update(dt);
+  if(state==='play')draw();
+  requestAnimationFrame(loop);
+}
+function resize(){
+  const s=Math.min(innerWidth/W,innerHeight/H);
+  cv.style.width=(W*s)+'px';cv.style.height=(H*s)+'px';
+}
+addEventListener('resize',resize);resize();
+requestAnimationFrame(loop);
+/* ================= buttons ================= */
+document.getElementById('startBtn').onclick=()=>{playSfx(sfxDecide);startGame();};
+document.getElementById('langBtn').onclick=()=>{
+  playSfx(sfxDecide);
+  lang=lang==='ja'?'en':'ja';
+  localStorage.setItem('jr_lang',lang);
+  applyLang();
+};
+applyLang();
+document.getElementById('nextDayBtn').onclick=()=>{playSfx(sfxDecide);day++;startDay();};
+document.getElementById('retryBtn1').onclick=()=>{playSfx(sfxDecide);startGame();};
+document.getElementById('retryBtn2').onclick=()=>{playSfx(sfxDecide);startGame();};
+/* 退勤: 誤タップ防止に2度押し確認 */
+const leaveBtn=document.getElementById('leaveBtn');
+let leaveArm=0;
+leaveBtn.addEventListener('pointerdown',e=>{
+  e.stopPropagation();
+  if(state!=='play')return;
+  playSfx(sfxDecide);
+  const now=performance.now();
+  if(now-leaveArm<2000){leaveBtn.textContent=tr('leave');leaveArm=0;endDay();}
+  else{leaveArm=now;leaveBtn.textContent=tr('leaveConfirm');
+    setTimeout(()=>{if(performance.now()-leaveArm>=1900){leaveBtn.textContent=tr('leave');leaveArm=0;}},2100);}
+});
+</script>
+</body>
+</html>
