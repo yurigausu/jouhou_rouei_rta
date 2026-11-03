@@ -56,7 +56,7 @@
 
 ## プレイ方法
 
-- オンライン: <!-- TODO: GitHub Pages URL -->
+- オンライン: [情報漏えいRTA](https://yurigausu.github.io/jouhou_rouei_rta/)
 - ローカル: `index.html` をブラウザで開けば動きます。ビルドやサーバーは不要です。
 
 ## 技術メモ
